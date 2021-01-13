@@ -14,10 +14,8 @@ import com.google.ads.interactivemedia.v3.api.AdsManager;
 import com.google.ads.interactivemedia.v3.api.AdsManagerLoadedEvent;
 import com.google.ads.interactivemedia.v3.api.AdsRenderingSettings;
 import com.google.ads.interactivemedia.v3.api.AdsRequest;
-import com.google.ads.interactivemedia.v3.api.CompanionAdSlot;
 import com.google.ads.interactivemedia.v3.api.ImaSdkFactory;
 import com.google.ads.interactivemedia.v3.api.ImaSdkSettings;
-import java.util.ArrayList;
 
 /** Ads logic for handling the IMA SDK integration code and events. */
 public class VideoPlayerController {
@@ -31,13 +29,15 @@ public class VideoPlayerController {
   private AdDisplayContainer adDisplayContainer;
 
   // The AdsLoader instance exposes the requestAds method.
-  private final AdsLoader adsLoader;
+  private AdsLoader adsLoader;
 
   // AdsManager exposes methods to control ad playback and listen to ad events.
   private AdsManager adsManager;
 
   // Factory class for creating SDK objects.
   private ImaSdkFactory sdkFactory;
+
+  ImaSdkSettings imaSdkSettings;
 
   // Ad-enabled video player.
   private VideoPlayerWithAdPlayback videoPlayerWithAdPlayback;
@@ -64,6 +64,8 @@ public class VideoPlayerController {
   // View that we can write log messages to, to display in the UI.
   private Logger log;
 
+  private Context ctx;
+
   private double playAdsAfterTime = -1;
 
   private boolean videoStarted;
@@ -79,65 +81,66 @@ public class VideoPlayerController {
 
       // Attach event and error event listeners.
       adsManager.addAdErrorListener(
-          new AdErrorEvent.AdErrorListener() {
-            /** An event raised when there is an error loading or playing ads. */
-            @Override
-            public void onAdError(AdErrorEvent adErrorEvent) {
-              log("Ad Error: " + adErrorEvent.getError().getMessage());
-              resumeContent();
-            }
-          });
-      adsManager.addAdEventListener(
-          new AdEvent.AdEventListener() {
-            /** Responds to AdEvents. */
-            @Override
-            public void onAdEvent(AdEvent adEvent) {
-              if (adEvent.getType() != AdEvent.AdEventType.AD_PROGRESS) {
-                log("Event: " + adEvent.getType());
-              }
-
-              // These are the suggested event types to handle. For full list of all ad
-              // event types, see the documentation for AdEvent.AdEventType.
-              switch (adEvent.getType()) {
-                case LOADED:
-                  // AdEventType.LOADED will be fired when ads are ready to be
-                  // played. AdsManager.start() begins ad playback. This method is
-                  // ignored for VMAP or ad rules playlists, as the SDK will
-                  // automatically start executing the playlist.
-                  adsManager.start();
-                  break;
-                case CONTENT_PAUSE_REQUESTED:
-                  // AdEventType.CONTENT_PAUSE_REQUESTED is fired immediately before
-                  // a video ad is played.
-                  pauseContent();
-                  break;
-                case CONTENT_RESUME_REQUESTED:
-                  // AdEventType.CONTENT_RESUME_REQUESTED is fired when the ad is
-                  // completed and you should start playing your content.
+              new AdErrorEvent.AdErrorListener() {
+                /** An event raised when there is an error loading or playing ads. */
+                @Override
+                public void onAdError(AdErrorEvent adErrorEvent) {
+                  log("Ad Error: " + adErrorEvent.getError().getMessage());
                   resumeContent();
-                  break;
-                case PAUSED:
-                  isAdPlaying = false;
-                  videoPlayerWithAdPlayback.enableControls();
-                  break;
-                case RESUMED:
-                  isAdPlaying = true;
-                  videoPlayerWithAdPlayback.disableControls();
-                  break;
-                case ALL_ADS_COMPLETED:
-                  if (adsManager != null) {
-                    adsManager.destroy();
-                    adsManager = null;
+                }
+              });
+      adsManager.addAdEventListener(
+              new AdEvent.AdEventListener() {
+                /** Responds to AdEvents. */
+                @Override
+                public void onAdEvent(AdEvent adEvent) {
+                  if (adEvent.getType() != AdEvent.AdEventType.AD_PROGRESS) {
+                    log("Event: " + adEvent.getType());
                   }
-                  adsLoader.release();
-                  break;
-                default:
-                  break;
-              }
-            }
-          });
+
+                  // These are the suggested event types to handle. For full list of all ad
+                  // event types, see the documentation for AdEvent.AdEventType.
+                  switch (adEvent.getType()) {
+                    case LOADED:
+                      // AdEventType.LOADED will be fired when ads are ready to be
+                      // played. AdsManager.start() begins ad playback. This method is
+                      // ignored for VMAP or ad rules playlists, as the SDK will
+                      // automatically start executing the playlist.
+                      adsManager.start();
+                      break;
+                    case CONTENT_PAUSE_REQUESTED:
+                      // AdEventType.CONTENT_PAUSE_REQUESTED is fired immediately before
+                      // a video ad is played.
+                      pauseContent();
+                      break;
+                    case CONTENT_RESUME_REQUESTED:
+                      // AdEventType.CONTENT_RESUME_REQUESTED is fired when the ad is
+                      // completed and you should start playing your content.
+                      resumeContent();
+                      break;
+                    case PAUSED:
+                      isAdPlaying = false;
+                      videoPlayerWithAdPlayback.enableControls();
+                      break;
+                    case RESUMED:
+                      isAdPlaying = true;
+                      videoPlayerWithAdPlayback.disableControls();
+                      break;
+                    case ALL_ADS_COMPLETED:
+                      if (adsManager != null) {
+                        adsManager.destroy();
+                        adsManager = null;
+                      }
+                      adsLoader.release();
+                      adsLoader = null;
+                      break;
+                    default:
+                      break;
+                  }
+                }
+              });
       AdsRenderingSettings adsRenderingSettings =
-          ImaSdkFactory.getInstance().createAdsRenderingSettings();
+              ImaSdkFactory.getInstance().createAdsRenderingSettings();
       adsRenderingSettings.setPlayAdsAfterTime(playAdsAfterTime);
       adsManager.init(adsRenderingSettings);
       seek(playAdsAfterTime);
@@ -146,51 +149,49 @@ public class VideoPlayerController {
   }
 
   public VideoPlayerController(
-      Context context,
-      VideoPlayerWithAdPlayback videoPlayerWithAdPlayback,
-      View playButton,
-      View playPauseToggle,
-      String language,
-      ViewGroup companionViewGroup,
-      Logger log) {
+          Context context,
+          VideoPlayerWithAdPlayback videoPlayerWithAdPlayback,
+          View playButton,
+          View playPauseToggle,
+          String language,
+          ViewGroup companionViewGroup,
+          Logger log) {
     this.videoPlayerWithAdPlayback = videoPlayerWithAdPlayback;
     this.playButton = playButton;
     this.playPauseToggle = playPauseToggle;
     isAdPlaying = false;
     this.companionViewGroup = companionViewGroup;
     this.log = log;
+    this.ctx = context;
 
     // Create an AdsLoader and optionally set the language.
     sdkFactory = ImaSdkFactory.getInstance();
-    ImaSdkSettings imaSdkSettings = sdkFactory.createImaSdkSettings();
+    imaSdkSettings = sdkFactory.createImaSdkSettings();
     imaSdkSettings.setLanguage(language);
+    imaSdkSettings.setDebugMode(true);
 
-    adDisplayContainer =
-        ImaSdkFactory.createAdDisplayContainer(
-            videoPlayerWithAdPlayback.getAdUiContainer(),
-            videoPlayerWithAdPlayback.getVideoAdPlayer());
-    adsLoader = sdkFactory.createAdsLoader(context, imaSdkSettings, adDisplayContainer);
+    createAdDisplayContainer();
 
     adsLoader.addAdErrorListener(
-        new AdErrorEvent.AdErrorListener() {
-          /** An event raised when there is an error loading or playing ads. */
-          @Override
-          public void onAdError(AdErrorEvent adErrorEvent) {
-            log("Ad Error: " + adErrorEvent.getError().getMessage());
-            resumeContent();
-          }
-        });
+            new AdErrorEvent.AdErrorListener() {
+              /** An event raised when there is an error loading or playing ads. */
+              @Override
+              public void onAdError(AdErrorEvent adErrorEvent) {
+                log("Ad Error: " + adErrorEvent.getError().getMessage());
+                resumeContent();
+              }
+            });
 
     adsLoader.addAdsLoadedListener(new VideoPlayerController.AdsLoadedListener());
 
     // When Play is clicked, request ads and hide the button.
     playButton.setOnClickListener(
-        new View.OnClickListener() {
-          @Override
-          public void onClick(View view) {
-            requestAndPlayAds(-1);
-          }
-        });
+            new View.OnClickListener() {
+              @Override
+              public void onClick(View view) {
+                requestAndPlayAds(-1);
+              }
+            });
   }
 
   private void log(String message) {
@@ -246,26 +247,43 @@ public class VideoPlayerController {
     adsLoader.requestAds(request);
   }
 
+  public void createAdDisplayContainer() {
+      if (adDisplayContainer == null) {
+        adDisplayContainer =
+                ImaSdkFactory.createAdDisplayContainer(
+                        videoPlayerWithAdPlayback.getAdUiContainer(),
+                        videoPlayerWithAdPlayback.getVideoAdPlayer());
+      }
+
+    createAdsLoader(ctx);
+  }
+
+  private void createAdsLoader(Context context) {
+    if (adsLoader == null) {
+      adsLoader = sdkFactory.createAdsLoader(context, imaSdkSettings, adDisplayContainer);
+    }
+  }
+
   /** Touch to toggle play/pause during ad play instead of seeking. */
   private void setPlayPauseOnAdTouch() {
     // Use AdsManager pause/resume methods instead of the video player pause/resume methods
     // in case the SDK is using a different, SDK-created video player for ad playback.
     playPauseToggle.setOnTouchListener(
-        new View.OnTouchListener() {
-          public boolean onTouch(View view, MotionEvent event) {
-            // If an ad is playing, touching it will toggle playback.
-            if (event.getAction() == MotionEvent.ACTION_DOWN) {
-              if (isAdPlaying) {
-                adsManager.pause();
-              } else {
-                adsManager.resume();
+            new View.OnTouchListener() {
+              public boolean onTouch(View view, MotionEvent event) {
+                // If an ad is playing, touching it will toggle playback.
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                  if (isAdPlaying) {
+                    adsManager.pause();
+                  } else {
+                    adsManager.resume();
+                  }
+                  return true;
+                } else {
+                  return false;
+                }
               }
-              return true;
-            } else {
-              return false;
-            }
-          }
-        });
+            });
   }
 
   /** Remove the play/pause on touch behavior. */

@@ -56,6 +56,7 @@ public class VideoFragment extends Fragment {
   private void initUi(View rootView) {
     VideoPlayerWithAdPlayback videoPlayerWithAdPlayback =
         rootView.findViewById(R.id.videoPlayerWithAdPlayback);
+    View changeMediaButton = rootView.findViewById(R.id.btn_change_media);
     View playButton = rootView.findViewById(R.id.playButton);
     View playPauseToggle = rootView.findViewById(R.id.videoContainer);
     ViewGroup companionAdSlot = rootView.findViewById(R.id.companionAdSlot);
@@ -63,7 +64,6 @@ public class VideoFragment extends Fragment {
     videoExampleLayout = rootView.findViewById(R.id.videoExampleLayout);
     videoExampleLayout.setOverScrollMode(View.OVER_SCROLL_ALWAYS);
     videoExampleLayout.setSmoothScrollingEnabled(true);
-
     // Make the dummyScrollContent height the size of the screen height.
     DisplayMetrics displayMetrics = new DisplayMetrics();
     getActivity().getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
@@ -101,6 +101,23 @@ public class VideoFragment extends Fragment {
     if (videoItem != null) {
       loadVideo(videoItem);
     }
+
+
+    changeMediaButton.setOnClickListener(v -> {
+
+      VideoItem videoItem = new VideoItem("ChangeMediaVideo",
+              "https://storage.googleapis.com/gvabox/media/samples/stock.mp4",
+              "https://pubads.g.doubleclick.net/gampad/ads?sz=640x480&iu=/124319096/external/"
+                      + "single_ad_samples&ciu_szs=300x250&impl=s&gdfp_req=1&env=vp&output=vast"
+                      + "&unviewed_position_start=1&cust_params=deployment%3Ddevsite%26sample_ct"
+                      + "%3Dlinear&correlator=",
+              R.drawable.thumbnail1,
+              false);
+      loadVideo(videoItem);
+      videoPlayerController.createAdDisplayContainer();
+      videoPlayerController.requestAndPlayAds(-1);
+    });
+
   }
 
   /** Shows or hides all non-video UI elements to make the video as large as possible. */
